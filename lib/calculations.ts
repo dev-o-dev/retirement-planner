@@ -1,5 +1,5 @@
 import { Portfolio, AnnualContributions, RetirementInputs, RetirementResults, DrawdownYear } from "./types";
-import { TAX, calculateIncomeTax, calculateCGT, grossPensionWithdrawalNeeded } from "./tax";
+import { TAX, calculateIncomeTax, calculateCGT, grossPensionWithdrawalNeeded, netStatePension } from "./tax";
 
 function growPortfolio(portfolio: Portfolio, rate: number): Portfolio {
   return {
@@ -102,12 +102,12 @@ function simulateDrawdown(inputs: RetirementInputs, portfolioAtRetirement: Portf
     }
 
     // --- 4. Pension (if age >= pensionAccessAge) via UFPLS ---
+    let taxablePensionDrawn = 0;
     if (remainingNeeded > 0 && p.pension > 0 && age >= pensionAccessAge) {
       const grossNeeded = grossPensionWithdrawalNeeded(remainingNeeded, statePensionGross);
       const gross = Math.min(grossNeeded, p.pension);
-      const taxFree = gross * TAX.pensionTaxFreeFraction;
-      const taxable = gross * (1 - TAX.pensionTaxFreeFraction);
-      const taxOnPension = calculateIncomeTax(statePensionGross + taxable) - calculateIncomeTax(statePensionGross);
+      taxablePensionDrawn = gross * (1 - TAX.pensionTaxFreeFraction);
+      const taxOnPension = calculateIncomeTax(statePensionGross + taxablePensionDrawn) - calculateIncomeTax(statePensionGross);
       const net = gross - taxOnPension;
 
       p.pension -= gross;
@@ -119,9 +119,8 @@ function simulateDrawdown(inputs: RetirementInputs, portfolioAtRetirement: Portf
 
     // --- 5. GIA (with CGT) ---
     if (remainingNeeded > 0 && p.gia > 0) {
-      // Determine taxable income for CGT band calculation
-      // We approximate: existing income = state pension + any pension drawn above
-      const taxableIncomeForCGT = statePensionGross; // simplified: pension drawn already counted in tax above
+      // CGT band depends on total taxable income this year: state pension + taxable pension drawn
+      const taxableIncomeForCGT = statePensionGross + taxablePensionDrawn;
 
       // Gains fraction of current GIA
       const gainsFraction = p.gia > 0 ? Math.max(0, p.gia - giaCostBasis) / p.gia : 0;
@@ -212,7 +211,7 @@ function checkBridgeGap(
   inputs: RetirementInputs,
   portfolioAtRetirement: Portfolio
 ): { canBridge: boolean; bridgePortfolio: Portfolio } {
-  const { retirementAge, pensionAccessAge, targetAnnualSpending, realReturnRate, eligibleForStatePension, statePensionAnnual, statePensionAge, statePensionAge: spAge } = inputs;
+  const { retirementAge, pensionAccessAge, targetAnnualSpending, realReturnRate, eligibleForStatePension, statePensionAnnual, statePensionAge } = inputs;
 
   if (retirementAge >= pensionAccessAge) {
     return { canBridge: true, bridgePortfolio: portfolioAtRetirement };
@@ -222,9 +221,8 @@ function checkBridgeGap(
   let giaCostBasis = portfolioAtRetirement.gia;
 
   for (let age = retirementAge; age < pensionAccessAge; age++) {
-    const statePensionNet = eligibleForStatePension && age >= statePensionAge
-      ? statePensionAnnual - calculateIncomeTax(statePensionAnnual)
-      : 0;
+    const statePensionGross = eligibleForStatePension && age >= statePensionAge ? statePensionAnnual : 0;
+    const statePensionNet = statePensionGross > 0 ? netStatePension(statePensionGross) : 0;
     let needed = Math.max(0, targetAnnualSpending - statePensionNet);
 
     // ISA
@@ -244,19 +242,19 @@ function checkBridgeGap(
     p.cash -= cashW;
     needed -= cashW;
 
-    // GIA
+    // GIA — include state pension in taxable income so CGT rate band is correct
     if (needed > 0 && p.gia > 0) {
       const gainsFraction = p.gia > 0 ? Math.max(0, p.gia - giaCostBasis) / p.gia : 0;
       let lo = 0, hi = Math.min(needed * 3, p.gia);
       for (let i = 0; i < 50; i++) {
         const mid = (lo + hi) / 2;
-        const cgt = calculateCGT(mid * gainsFraction, 0);
+        const cgt = calculateCGT(mid * gainsFraction, statePensionGross);
         if (mid - cgt < needed) lo = mid; else hi = mid;
       }
       const giaW = Math.min(hi, p.gia);
       giaCostBasis = giaCostBasis * (1 - giaW / p.gia);
       p.gia -= giaW;
-      needed = Math.max(0, needed - (giaW - calculateCGT(giaW * gainsFraction, 0)));
+      needed = Math.max(0, needed - (giaW - calculateCGT(giaW * gainsFraction, statePensionGross)));
     }
 
     if (needed > 0) {
@@ -264,9 +262,8 @@ function checkBridgeGap(
       return { canBridge: false, bridgePortfolio: p };
     }
 
-    // Grow non-pension assets for next year
+    // Grow non-pension assets; pension stays locked; cost basis stays flat
     p = { ...growPortfolio(p, realReturnRate), pension: p.pension };
-    giaCostBasis = giaCostBasis; // stays fixed
   }
 
   return { canBridge: true, bridgePortfolio: p };

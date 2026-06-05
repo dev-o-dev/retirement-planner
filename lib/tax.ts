@@ -44,7 +44,8 @@ export function calculateIncomeTax(grossIncome: number): number {
 
   let tax = 0;
 
-  const basicBand = TAX.basicRateLimit - TAX.personalAllowance;
+  // Band widths are measured from the effective PA, not the constant PA
+  const basicBand = TAX.basicRateLimit - pa;
   const inBasic = Math.min(taxable, basicBand);
   tax += inBasic * TAX.basicRate;
 
@@ -53,8 +54,8 @@ export function calculateIncomeTax(grossIncome: number): number {
     tax += inHigher * TAX.higherRate;
   }
 
-  if (taxable > TAX.higherRateLimit - TAX.personalAllowance) {
-    const inAdditional = taxable - (TAX.higherRateLimit - TAX.personalAllowance);
+  if (taxable > TAX.higherRateLimit - pa) {
+    const inAdditional = taxable - (TAX.higherRateLimit - pa);
     tax += inAdditional * TAX.additionalRate;
   }
 

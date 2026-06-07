@@ -28,11 +28,45 @@ function fmt(value: number): string {
 
 const COLOURS = {
   pension: "#6366f1",
-  isa: "#22c55e",
-  lisa: "#84cc16",
+  isa: "#10b981",
+  lisa: "#14b8a6",
   cash: "#f59e0b",
-  gia: "#f97316",
+  gia: "#f43f5e",
 };
+
+const GRID = "#e2e8f0";
+const AXIS = "#94a3b8";
+const LABEL = "#64748b";
+
+function CustomTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ name: string; value: number; color: string }>;
+  label?: number;
+}) {
+  if (!active || !payload?.length) return null;
+  const total = payload.reduce((s, p) => s + (p.value ?? 0), 0);
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-lg p-3 text-sm tnum">
+      <p className="font-semibold text-slate-900 mb-2">Age {label}</p>
+      {payload.map((p) =>
+        p.value > 0 ? (
+          <div key={p.name} className="flex justify-between gap-6">
+            <span style={{ color: p.color }}>{p.name}</span>
+            <span className="font-medium text-slate-700">{fmt(p.value)}</span>
+          </div>
+        ) : null
+      )}
+      <div className="border-t border-slate-100 mt-1.5 pt-1.5 flex justify-between font-semibold text-slate-900">
+        <span>Total</span>
+        <span>{fmt(total)}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function DrawdownChart({ drawdownYears, pensionAccessAge, statePensionAge, retirementAge }: Props) {
   const data = drawdownYears.map((y) => ({
@@ -44,32 +78,6 @@ export default function DrawdownChart({ drawdownYears, pensionAccessAge, statePe
     GIA: Math.round(y.gia),
     total: Math.round(y.portfolioValue),
   }));
-
-  const CustomTooltip = ({ active, payload, label }: {
-    active?: boolean;
-    payload?: Array<{ name: string; value: number; color: string }>;
-    label?: number;
-  }) => {
-    if (!active || !payload?.length) return null;
-    const total = payload.reduce((s, p) => s + (p.value ?? 0), 0);
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <p className="font-semibold text-gray-900 mb-2">Age {label}</p>
-        {payload.map((p) =>
-          p.value > 0 ? (
-            <div key={p.name} className="flex justify-between gap-4">
-              <span style={{ color: p.color }}>{p.name}</span>
-              <span className="font-medium">{fmt(p.value)}</span>
-            </div>
-          ) : null
-        )}
-        <div className="border-t border-gray-200 mt-1 pt-1 flex justify-between font-semibold text-gray-900">
-          <span>Total</span>
-          <span>{fmt(total)}</span>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="w-full h-80">
@@ -83,41 +91,41 @@ export default function DrawdownChart({ drawdownYears, pensionAccessAge, statePe
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
           <XAxis
             dataKey="age"
             tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 12, fill: "#6b7280" }}
-            label={{ value: "Age", position: "insideBottomRight", offset: -5, fontSize: 12, fill: "#6b7280" }}
+            axisLine={{ stroke: GRID }}
+            tick={{ fontSize: 12, fill: LABEL }}
+            label={{ value: "Age", position: "insideBottomRight", offset: -5, fontSize: 12, fill: AXIS }}
           />
           <YAxis
             tickFormatter={(v) => fmt(v)}
             tickLine={false}
             axisLine={false}
-            tick={{ fontSize: 11, fill: "#6b7280" }}
+            tick={{ fontSize: 11, fill: LABEL }}
             width={55}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<CustomTooltip />} cursor={{ stroke: AXIS, strokeDasharray: "3 3" }} />
           <Legend
             wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
-            formatter={(value) => <span className="text-gray-700">{value}</span>}
+            formatter={(value) => <span className="text-slate-600">{value}</span>}
           />
 
           {pensionAccessAge > retirementAge && (
             <ReferenceLine
               x={pensionAccessAge}
-              stroke="#6366f1"
+              stroke={COLOURS.pension}
               strokeDasharray="4 2"
-              label={{ value: "Pension access", position: "top", fontSize: 10, fill: "#6366f1" }}
+              label={{ value: "Pension access", position: "top", fontSize: 10, fill: COLOURS.pension }}
             />
           )}
           {statePensionAge > retirementAge && (
             <ReferenceLine
               x={statePensionAge}
-              stroke="#22c55e"
+              stroke={COLOURS.gia}
               strokeDasharray="4 2"
-              label={{ value: "State pension", position: "top", fontSize: 10, fill: "#22c55e" }}
+              label={{ value: "State pension", position: "top", fontSize: 10, fill: COLOURS.gia }}
             />
           )}
 

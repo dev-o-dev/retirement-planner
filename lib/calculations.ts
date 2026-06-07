@@ -1,4 +1,4 @@
-import { Portfolio, AnnualContributions, RetirementInputs, RetirementResults, DrawdownYear } from "./types";
+import { Portfolio, AnnualContributions, RetirementInputs, RetirementResults, DrawdownYear, MortgagePayoffSource } from "./types";
 import { TAX, calculateIncomeTax, calculateCGT, grossPensionWithdrawalNeeded, netStatePension } from "./tax";
 
 function growPortfolio(portfolio: Portfolio, rate: number): Portfolio {
@@ -47,19 +47,117 @@ function accumulatePortfolio(inputs: RetirementInputs): Portfolio {
 }
 
 /**
+ * Result of clearing the mortgage from the portfolio in a single year.
+ * Mutates the passed-in portfolio.
+ */
+interface MortgagePayoffOutcome {
+  taxPaid: number; // income tax (pension) or CGT (GIA) triggered by funding the lump sum
+  paid: number; // how much of the balance was actually cleared
+  giaCostBasis: number; // updated GIA cost basis after any GIA drain
+  taxablePension: number; // taxable pension income generated this year (affects other bands)
+}
+
+/**
+ * Clears `amount` off the mortgage from the portfolio, draining the user's
+ * chosen source first and overflowing into other pots if it runs short.
+ *
+ * - cash / isa: tax-free, £1 of pot clears £1 of mortgage.
+ * - gia: realises gains, so CGT is applied (more pot is needed per £ cleared).
+ * - pension: drawn as UFPLS (25% tax-free, 75% taxable), consistent with the
+ *   rest of the engine; only available once the pension is accessible.
+ */
+function payMortgageLumpSum(
+  p: Portfolio,
+  giaCostBasis: number,
+  amount: number,
+  source: MortgagePayoffSource,
+  age: number,
+  pensionAccessAge: number,
+  otherTaxableIncome: number
+): MortgagePayoffOutcome {
+  let remaining = amount;
+  let taxPaid = 0;
+  let taxablePension = 0;
+
+  const drainTaxFree = (pot: "cash" | "isa") => {
+    if (remaining <= 0) return;
+    const w = Math.min(remaining, p[pot]);
+    p[pot] -= w;
+    remaining -= w;
+  };
+
+  const drainGIA = () => {
+    if (remaining <= 0 || p.gia <= 0) return;
+    const gainsFraction = Math.max(0, p.gia - giaCostBasis) / p.gia;
+    let lo = 0;
+    let hi = Math.min(remaining * 3, p.gia);
+    for (let i = 0; i < 50; i++) {
+      const mid = (lo + hi) / 2;
+      const cgt = calculateCGT(mid * gainsFraction, otherTaxableIncome);
+      if (mid - cgt < remaining) lo = mid;
+      else hi = mid;
+    }
+    const w = Math.min(hi, p.gia);
+    const cgt = calculateCGT(w * gainsFraction, otherTaxableIncome);
+    giaCostBasis = giaCostBasis * (1 - w / p.gia);
+    p.gia -= w;
+    taxPaid += cgt;
+    remaining = Math.max(0, remaining - (w - cgt));
+  };
+
+  const drainPension = () => {
+    if (remaining <= 0 || p.pension <= 0 || age < pensionAccessAge) return;
+    const grossNeeded = grossPensionWithdrawalNeeded(remaining, otherTaxableIncome + taxablePension);
+    const gross = Math.min(grossNeeded, p.pension);
+    const taxable = gross * (1 - TAX.pensionTaxFreeFraction);
+    const tax =
+      calculateIncomeTax(otherTaxableIncome + taxablePension + taxable) -
+      calculateIncomeTax(otherTaxableIncome + taxablePension);
+    p.pension -= gross;
+    taxPaid += tax;
+    taxablePension += taxable;
+    remaining = Math.max(0, remaining - (gross - tax));
+  };
+
+  // Chosen source first, then a sensible fallback order so the balance still clears.
+  const order: Array<() => void> =
+    source === "pension"
+      ? [drainPension, () => drainTaxFree("cash"), () => drainTaxFree("isa"), drainGIA]
+      : source === "isa"
+      ? [() => drainTaxFree("isa"), () => drainTaxFree("cash"), drainGIA, drainPension]
+      : [() => drainTaxFree("cash"), () => drainTaxFree("isa"), drainGIA, drainPension];
+
+  for (const step of order) step();
+
+  return { taxPaid, paid: amount - remaining, giaCostBasis, taxablePension };
+}
+
+/**
  * Simulates drawdown year by year in retirement.
  * Returns an array of yearly snapshots.
  *
  * GIA cost basis: starts at retirement GIA value (all existing gains already "baked in").
  * New growth in GIA is trackable as gains from retirement day forward.
  */
-function simulateDrawdown(inputs: RetirementInputs, portfolioAtRetirement: Portfolio): DrawdownYear[] {
+function simulateDrawdown(
+  inputs: RetirementInputs,
+  portfolioAtRetirement: Portfolio
+): { years: DrawdownYear[]; payoff: RetirementResults["mortgagePayoff"] } {
   const { retirementAge, realReturnRate, targetAnnualSpending, pensionAccessAge, eligibleForStatePension, statePensionAnnual, statePensionAge } = inputs;
 
   let p: Portfolio = { ...portfolioAtRetirement };
   // Track GIA cost basis: value at retirement is basis (we don't know pre-retirement gains)
   let giaCostBasis = portfolioAtRetirement.gia;
   const years: DrawdownYear[] = [];
+
+  // Mortgage is cleared in a single year. It can't be paid before retirement (the
+  // pot doesn't exist yet) or past age 100, so clamp into the simulated window.
+  const mortgageBalance = inputs.hasMortgage ? inputs.mortgageRemaining : 0;
+  const mortgagePayoffAge = Math.min(100, Math.max(retirementAge, inputs.mortgagePayoffAge));
+  let payoff: RetirementResults["mortgagePayoff"] =
+    mortgageBalance > 0
+      ? { age: mortgagePayoffAge, source: inputs.mortgagePayoffSource, amount: mortgageBalance, taxPaid: 0, fullyPaid: false }
+      : null;
 
   // Run to age 100 or until portfolio is empty
   for (let age = retirementAge; age <= 100; age++) {
@@ -76,6 +174,27 @@ function simulateDrawdown(inputs: RetirementInputs, portfolioAtRetirement: Portf
     let remainingNeeded = neededFromPortfolio;
     let totalTaxPaid = statePensionTax;
     let totalWithdrawn = 0;
+
+    // --- 0. Mortgage payoff (one-off lump sum in the chosen year) ---
+    // Taxable pension drawn to fund it pushes up the income-tax band for the rest
+    // of this year's withdrawals, so we carry it forward.
+    let mortgageTaxablePension = 0;
+    if (payoff && age === payoff.age) {
+      const outcome = payMortgageLumpSum(
+        p,
+        giaCostBasis,
+        payoff.amount,
+        payoff.source,
+        age,
+        pensionAccessAge,
+        statePensionGross
+      );
+      giaCostBasis = outcome.giaCostBasis;
+      mortgageTaxablePension = outcome.taxablePension;
+      totalTaxPaid += outcome.taxPaid;
+      totalWithdrawn += outcome.paid + outcome.taxPaid;
+      payoff = { ...payoff, taxPaid: outcome.taxPaid, fullyPaid: outcome.paid >= payoff.amount - 0.01 };
+    }
 
     // --- 1. ISA (tax-free) ---
     if (remainingNeeded > 0 && p.isa > 0) {
@@ -104,10 +223,12 @@ function simulateDrawdown(inputs: RetirementInputs, portfolioAtRetirement: Portf
     // --- 4. Pension (if age >= pensionAccessAge) via UFPLS ---
     let taxablePensionDrawn = 0;
     if (remainingNeeded > 0 && p.pension > 0 && age >= pensionAccessAge) {
-      const grossNeeded = grossPensionWithdrawalNeeded(remainingNeeded, statePensionGross);
+      const grossNeeded = grossPensionWithdrawalNeeded(remainingNeeded, statePensionGross + mortgageTaxablePension);
       const gross = Math.min(grossNeeded, p.pension);
       taxablePensionDrawn = gross * (1 - TAX.pensionTaxFreeFraction);
-      const taxOnPension = calculateIncomeTax(statePensionGross + taxablePensionDrawn) - calculateIncomeTax(statePensionGross);
+      const taxOnPension =
+        calculateIncomeTax(statePensionGross + mortgageTaxablePension + taxablePensionDrawn) -
+        calculateIncomeTax(statePensionGross + mortgageTaxablePension);
       const net = gross - taxOnPension;
 
       p.pension -= gross;
@@ -120,7 +241,7 @@ function simulateDrawdown(inputs: RetirementInputs, portfolioAtRetirement: Portf
     // --- 5. GIA (with CGT) ---
     if (remainingNeeded > 0 && p.gia > 0) {
       // CGT band depends on total taxable income this year: state pension + taxable pension drawn
-      const taxableIncomeForCGT = statePensionGross + taxablePensionDrawn;
+      const taxableIncomeForCGT = statePensionGross + mortgageTaxablePension + taxablePensionDrawn;
 
       // Gains fraction of current GIA
       const gainsFraction = p.gia > 0 ? Math.max(0, p.gia - giaCostBasis) / p.gia : 0;
@@ -201,7 +322,7 @@ function simulateDrawdown(inputs: RetirementInputs, portfolioAtRetirement: Portf
     }
   }
 
-  return years;
+  return { years, payoff };
 }
 
 /**
@@ -220,9 +341,24 @@ function checkBridgeGap(
   let p: Portfolio = { ...portfolioAtRetirement };
   let giaCostBasis = portfolioAtRetirement.gia;
 
+  const mortgageBalance = inputs.hasMortgage ? inputs.mortgageRemaining : 0;
+  const mortgagePayoffAge = Math.max(retirementAge, inputs.mortgagePayoffAge);
+
   for (let age = retirementAge; age < pensionAccessAge; age++) {
     const statePensionGross = eligibleForStatePension && age >= statePensionAge ? statePensionAnnual : 0;
     const statePensionNet = statePensionGross > 0 ? netStatePension(statePensionGross) : 0;
+
+    // Clear the mortgage if this is the chosen year. Before pension access the
+    // pension is locked, so payMortgageLumpSum will overflow to cash/ISA/GIA.
+    if (mortgageBalance > 0 && age === mortgagePayoffAge) {
+      const outcome = payMortgageLumpSum(p, giaCostBasis, mortgageBalance, inputs.mortgagePayoffSource, age, pensionAccessAge, statePensionGross);
+      giaCostBasis = outcome.giaCostBasis;
+      if (outcome.paid < mortgageBalance - 0.01) {
+        // Couldn't clear the mortgage from bridge assets without the pension.
+        return { canBridge: false, bridgePortfolio: p };
+      }
+    }
+
     let needed = Math.max(0, targetAnnualSpending - statePensionNet);
 
     // ISA
@@ -273,11 +409,12 @@ function checkBridgeGap(
  * Finds the earliest age at which the user can retire given current trajectory.
  */
 function findEarliestRetirementAge(inputs: RetirementInputs): number | null {
+  const mortgageCost = inputs.hasMortgage ? inputs.mortgageRemaining : 0;
   for (let testAge = inputs.currentAge + 1; testAge <= 75; testAge++) {
     const testInputs = { ...inputs, retirementAge: testAge };
     const port = accumulatePortfolio(testInputs);
     const total = totalPortfolio(port);
-    const swrIncome = total * inputs.swr;
+    const swrIncome = Math.max(0, total - mortgageCost) * inputs.swr;
     if (swrIncome >= inputs.targetAnnualSpending) {
       // Also check bridge gap
       if (testAge < inputs.pensionAccessAge) {
@@ -293,33 +430,28 @@ function findEarliestRetirementAge(inputs: RetirementInputs): number | null {
 
 export function calculateRetirement(inputs: RetirementInputs): RetirementResults {
   const portfolioAtRetirement = accumulatePortfolio(inputs);
+  const totalAtRetirement = totalPortfolio(portfolioAtRetirement);
 
-  // Deduct outstanding mortgage from portfolio at retirement (paid off from liquid assets).
-  // Drain cash first, then ISA, then GIA, then pension as last resort.
-  let remaining = inputs.hasMortgage ? inputs.mortgageRemaining : 0;
-  const mp = { ...portfolioAtRetirement };
-  if (remaining > 0) {
-    const cashDrain = Math.min(remaining, mp.cash); mp.cash -= cashDrain; remaining -= cashDrain;
-    const isaDrain = Math.min(remaining, mp.isa); mp.isa -= isaDrain; remaining -= isaDrain;
-    const giaDrain = Math.min(remaining, mp.gia); mp.gia -= giaDrain; remaining -= giaDrain;
-    const pensionDrain = Math.min(remaining, mp.pension); mp.pension -= pensionDrain; remaining -= pensionDrain;
-  }
-  const netPortfolioAtRetirement: Portfolio = mp;
-  const netTotalAtRetirement = totalPortfolio(netPortfolioAtRetirement);
+  // The mortgage is a committed liability that will leave the pot at the chosen
+  // payoff age (modelled year-by-year in the drawdown below). For the SWR
+  // sustainability headline we reduce the base by the outstanding balance, which
+  // is timing-independent and conservative.
+  const mortgageCost = inputs.hasMortgage ? inputs.mortgageRemaining : 0;
+  const swrBase = Math.max(0, totalAtRetirement - mortgageCost);
 
-  const swrIncome = netTotalAtRetirement * inputs.swr;
+  const swrIncome = swrBase * inputs.swr;
   const canRetire = swrIncome >= inputs.targetAnnualSpending;
   const shortfall = Math.max(0, inputs.targetAnnualSpending - swrIncome);
 
   const needsBridge = inputs.retirementAge < inputs.pensionAccessAge;
   const { canBridge, bridgePortfolio } = needsBridge
-    ? checkBridgeGap({ ...inputs }, netPortfolioAtRetirement)
-    : { canBridge: true, bridgePortfolio: netPortfolioAtRetirement };
+    ? checkBridgeGap(inputs, portfolioAtRetirement)
+    : { canBridge: true, bridgePortfolio: portfolioAtRetirement };
 
   // LISA penalty warning: retiring before 60 with a LISA balance
-  const lisaPenaltyWarning = inputs.retirementAge < TAX.lisaAccessAge && netPortfolioAtRetirement.lisa > 0;
+  const lisaPenaltyWarning = inputs.retirementAge < TAX.lisaAccessAge && portfolioAtRetirement.lisa > 0;
 
-  const drawdownYears = simulateDrawdown(inputs, netPortfolioAtRetirement);
+  const { years: drawdownYears, payoff: mortgagePayoff } = simulateDrawdown(inputs, portfolioAtRetirement);
 
   // Find age portfolio is exhausted
   const exhaustedEntry = drawdownYears.find((y) => y.portfolioValue <= 0);
@@ -329,8 +461,8 @@ export function calculateRetirement(inputs: RetirementInputs): RetirementResults
 
   return {
     canRetire,
-    portfolioAtRetirement: netPortfolioAtRetirement,
-    portfolioValueAtRetirement: netTotalAtRetirement,
+    portfolioAtRetirement,
+    portfolioValueAtRetirement: totalAtRetirement,
     swrIncomeAtRetirement: swrIncome,
     shortfallAtRetirement: shortfall,
     needsBridge,
@@ -338,6 +470,7 @@ export function calculateRetirement(inputs: RetirementInputs): RetirementResults
     bridgeYears: Math.max(0, inputs.pensionAccessAge - inputs.retirementAge),
     canBridgeGap: canBridge,
     lisaPenaltyWarning,
+    mortgagePayoff,
     drawdownYears,
     portfolioExhaustedAge,
     ageCanRetire,

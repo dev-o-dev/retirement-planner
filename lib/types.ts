@@ -14,6 +14,8 @@ export interface AnnualContributions {
   gia: number;
 }
 
+export type MortgagePayoffSource = "cash" | "isa" | "pension";
+
 export interface RetirementInputs {
   currentAge: number;
   retirementAge: number;
@@ -24,6 +26,8 @@ export interface RetirementInputs {
   // Mortgage
   hasMortgage: boolean;
   mortgageRemaining: number;
+  mortgagePayoffAge: number; // age at which the remaining balance is cleared
+  mortgagePayoffSource: MortgagePayoffSource; // which pot funds the lump sum
 
   // Annual contributions until retirement
   contributions: AnnualContributions;
@@ -75,6 +79,15 @@ export interface RetirementResults {
 
   // LISA penalty warning
   lisaPenaltyWarning: boolean;
+
+  // Mortgage payoff (null when there is no mortgage)
+  mortgagePayoff: {
+    age: number;
+    source: MortgagePayoffSource;
+    amount: number; // outstanding balance cleared
+    taxPaid: number; // tax/CGT triggered by funding the lump sum
+    fullyPaid: boolean; // false if the pot could not cover the balance
+  } | null;
 
   // Drawdown projection
   drawdownYears: DrawdownYear[];

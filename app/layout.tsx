@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "UK Retirement Planner",
-  description: "Find out if you can retire. Models UK pension rules, ISA, LISA, income tax, and capital gains tax using 2025/26 tax bands.",
+  description:
+    "Find out if you can retire. Models UK pension rules, ISA, LISA, income tax, and capital gains tax using 2025/26 tax bands.",
 };
 
 export default function RootLayout({

@@ -8,6 +8,20 @@ interface Props {
   onCalculate: (inputs: RetirementInputs) => void;
 }
 
+const inputClass =
+  "w-full rounded-lg border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20";
+
+function FieldLabel({ htmlFor, label, hint }: { htmlFor: string; label: string; hint?: string }) {
+  return (
+    <>
+      <label htmlFor={htmlFor} className="block text-sm font-medium text-slate-700 mb-1">
+        {label}
+      </label>
+      {hint && <p className="text-xs text-slate-500 mb-1.5 leading-snug">{hint}</p>}
+    </>
+  );
+}
+
 function CurrencyInput({
   label,
   value,
@@ -32,13 +46,10 @@ function CurrencyInput({
 
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
-        {label}
-      </label>
-      {hint && <p className="text-xs text-gray-500 mb-1">{hint}</p>}
-      <div className="relative rounded-md shadow-sm">
+      <FieldLabel htmlFor={id} label={label} hint={hint} />
+      <div className="relative">
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-          <span className="text-gray-500 text-sm">£</span>
+          <span className="text-slate-400 text-sm">£</span>
         </div>
         <input
           id={id}
@@ -48,7 +59,7 @@ function CurrencyInput({
           onChange={handleChange}
           onFocus={(e) => e.target.select()}
           placeholder="0"
-          className="block w-full rounded-md border border-gray-300 pl-7 pr-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className={`${inputClass} tnum pl-7 pr-3 py-2.5`}
         />
       </div>
     </div>
@@ -76,26 +87,40 @@ function NumberInput({
   hint?: string;
   id: string;
 }) {
+  const [raw, setRaw] = useState(String(value));
+
+  // Keep the displayed text in sync when the value changes from outside
+  // (e.g. retirement age being clamped to current age + 1).
+  if (raw !== "" && parseFloat(raw) !== value) {
+    setRaw(String(value));
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setRaw(v);
+    const n = parseFloat(v);
+    if (!isNaN(n)) onChange(n);
+  };
+
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
-        {label}
-      </label>
-      {hint && <p className="text-xs text-gray-500 mb-1">{hint}</p>}
-      <div className="relative rounded-md shadow-sm">
+      <FieldLabel htmlFor={id} label={label} hint={hint} />
+      <div className="relative">
         <input
           id={id}
           type="number"
-          value={value}
-          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+          value={raw}
+          onChange={handleChange}
+          onFocus={(e) => e.target.select()}
+          onBlur={() => raw === "" && setRaw(String(value))}
           min={min}
           max={max}
           step={step ?? 1}
-          className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className={`${inputClass} tnum px-3 py-2.5 ${suffix ? "pr-12" : ""}`}
         />
         {suffix && (
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-            <span className="text-gray-500 text-sm">{suffix}</span>
+            <span className="text-slate-400 text-sm">{suffix}</span>
           </div>
         )}
       </div>
@@ -103,12 +128,64 @@ function NumberInput({
   );
 }
 
-function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+function SelectInput<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  hint,
+  id,
+}: {
+  label: string;
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+  hint?: string;
+  id: string;
+}) {
   return (
-    <div className="mb-4">
-      <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-      {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
+    <div>
+      <FieldLabel htmlFor={id} label={label} hint={hint} />
+      <div className="relative">
+        <select
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value as T)}
+          className={`${inputClass} appearance-none px-3 py-2.5 pr-9 cursor-pointer`}
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function Card({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 shadow-sm">
+      <div className="mb-5">
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h2>
+        {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -118,6 +195,8 @@ const defaultInputs: RetirementInputs = {
   portfolio: { cash: 10000, pension: 50000, isa: 20000, lisa: 5000, gia: 0 },
   hasMortgage: false,
   mortgageRemaining: 0,
+  mortgagePayoffAge: 60,
+  mortgagePayoffSource: "cash",
   contributions: { cash: 0, pension: 6000, isa: 10000, lisa: 4000, gia: 0 },
   eligibleForStatePension: true,
   statePensionAnnual: TAX.fullStatePension,
@@ -149,14 +228,10 @@ export default function RetirementForm({ onCalculate }: Props) {
   const yearsToRetirement = inputs.retirementAge - inputs.currentAge;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={handleSubmit} className="space-y-6">
       {/* About You */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <SectionHeader
-          title="About You"
-          subtitle="Basic details about your timeline"
-        />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <Card title="About you" subtitle="Basic details about your timeline">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <NumberInput
             id="currentAge"
             label="Current age"
@@ -177,19 +252,21 @@ export default function RetirementForm({ onCalculate }: Props) {
           />
         </div>
         {yearsToRetirement > 0 && (
-          <p className="mt-3 text-sm text-indigo-600 font-medium">
-            {yearsToRetirement} year{yearsToRetirement !== 1 ? "s" : ""} until your target retirement age
-          </p>
+          <div className="mt-4 flex items-center gap-2 rounded-lg bg-indigo-50 px-3.5 py-2.5 text-sm text-indigo-700">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>
+              <span className="font-semibold tnum">{yearsToRetirement}</span> year
+              {yearsToRetirement !== 1 ? "s" : ""} until your target retirement age
+            </span>
+          </div>
         )}
-      </div>
+      </Card>
 
       {/* Current Portfolio */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <SectionHeader
-          title="Current Portfolio"
-          subtitle="Your savings and investments today"
-        />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <Card title="Current portfolio" subtitle="Your savings and investments today">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <CurrencyInput id="cash" label="Cash savings" value={inputs.portfolio.cash} onChange={(v) => setPortfolio("cash", v)} hint="ISA, premium bonds, savings accounts" />
           <CurrencyInput id="pension" label="Pension (DC / SIPP)" value={inputs.portfolio.pension} onChange={(v) => setPortfolio("pension", v)} hint="Defined contribution or SIPP pot value" />
           <CurrencyInput id="isa" label="Stocks & Shares ISA" value={inputs.portfolio.isa} onChange={(v) => setPortfolio("isa", v)} />
@@ -198,40 +275,62 @@ export default function RetirementForm({ onCalculate }: Props) {
         </div>
 
         {/* Mortgage */}
-        <div className="mt-5 pt-4 border-t border-gray-100">
-          <div className="flex items-center gap-3">
+        <div className="mt-6 pt-5 border-t border-slate-100">
+          <label htmlFor="hasMortgage" className="flex items-center gap-3 cursor-pointer">
             <input
               id="hasMortgage"
               type="checkbox"
               checked={inputs.hasMortgage}
               onChange={(e) => set("hasMortgage", e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
-            <label htmlFor="hasMortgage" className="text-sm font-medium text-gray-700">
-              I have an outstanding mortgage
-            </label>
-          </div>
+            <span className="text-sm font-medium text-slate-700">I have an outstanding mortgage</span>
+          </label>
           {inputs.hasMortgage && (
-            <div className="mt-3 max-w-xs">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-5">
               <CurrencyInput
                 id="mortgageRemaining"
-                label="Remaining mortgage balance"
+                label="Remaining balance"
                 value={inputs.mortgageRemaining}
                 onChange={(v) => set("mortgageRemaining", v)}
-                hint="This will be deducted from your cash at retirement"
+                hint="Outstanding at retirement"
+              />
+              <NumberInput
+                id="mortgagePayoffAge"
+                label="Pay off at age"
+                value={inputs.mortgagePayoffAge}
+                onChange={(v) => set("mortgagePayoffAge", v)}
+                min={inputs.retirementAge}
+                max={100}
+                suffix="yrs"
+                hint={`On/after retirement (${inputs.retirementAge})`}
+              />
+              <SelectInput
+                id="mortgagePayoffSource"
+                label="Pay off from"
+                value={inputs.mortgagePayoffSource}
+                onChange={(v) => set("mortgagePayoffSource", v)}
+                options={[
+                  { value: "cash", label: "Cash savings" },
+                  { value: "isa", label: "Stocks & Shares ISA" },
+                  { value: "pension", label: "Pension (25% tax-free)" },
+                ]}
+                hint="Pot used first; overflows if short"
               />
             </div>
           )}
+          {inputs.hasMortgage && inputs.mortgagePayoffSource === "pension" && (
+            <p className="mt-3 text-xs text-slate-500 leading-snug">
+              Drawn as a pension lump sum: 25% tax-free, the rest taxed as income. Only available once your
+              pension is accessible (age {inputs.pensionAccessAge}).
+            </p>
+          )}
         </div>
-      </div>
+      </Card>
 
       {/* Annual Contributions */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <SectionHeader
-          title="Annual Contributions"
-          subtitle={`How much you'll invest each year until age ${inputs.retirementAge}`}
-        />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <Card title="Annual contributions" subtitle={`How much you'll invest each year until age ${inputs.retirementAge}`}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <CurrencyInput id="contrib-cash" label="Cash savings" value={inputs.contributions.cash} onChange={(v) => setContributions("cash", v)} hint="Per year" />
           <CurrencyInput id="contrib-pension" label="Pension (gross)" value={inputs.contributions.pension} onChange={(v) => setContributions("pension", v)} hint="Including employer contributions and tax relief" />
           <CurrencyInput id="contrib-isa" label="Stocks & Shares ISA" value={inputs.contributions.isa} onChange={(v) => setContributions("isa", v)} hint="Max £20,000/year combined ISA limit" />
@@ -244,28 +343,22 @@ export default function RetirementForm({ onCalculate }: Props) {
           />
           <CurrencyInput id="contrib-gia" label="GIA" value={inputs.contributions.gia} onChange={(v) => setContributions("gia", v)} hint="Per year" />
         </div>
-      </div>
+      </Card>
 
       {/* State Pension */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <SectionHeader
-          title="State Pension"
-          subtitle="UK new state pension from age 68"
-        />
-        <div className="flex items-center gap-3 mb-4">
+      <Card title="State pension" subtitle="UK new state pension from age 68">
+        <label htmlFor="statePension" className="flex items-center gap-3 mb-5 cursor-pointer">
           <input
             id="statePension"
             type="checkbox"
             checked={inputs.eligibleForStatePension}
             onChange={(e) => set("eligibleForStatePension", e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
           />
-          <label htmlFor="statePension" className="text-sm font-medium text-gray-700">
-            I expect to receive the UK State Pension
-          </label>
-        </div>
+          <span className="text-sm font-medium text-slate-700">I expect to receive the UK State Pension</span>
+        </label>
         {inputs.eligibleForStatePension && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <CurrencyInput
               id="statePensionAmount"
               label="Expected state pension (gross, per year)"
@@ -285,14 +378,10 @@ export default function RetirementForm({ onCalculate }: Props) {
             />
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Retirement Spending */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <SectionHeader
-          title="Retirement Spending"
-          subtitle="How much you want to spend each year in retirement"
-        />
+      <Card title="Retirement spending" subtitle="How much you want to spend each year in retirement">
         <div className="max-w-sm">
           <CurrencyInput
             id="targetSpending"
@@ -302,23 +391,23 @@ export default function RetirementForm({ onCalculate }: Props) {
             hint="The PLSA recommends £37,000/year for a 'comfortable' retirement for one person"
           />
         </div>
-      </div>
+      </Card>
 
       {/* Advanced / Assumptions */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+          className="w-full flex items-center justify-between px-6 sm:px-7 py-4 text-left hover:bg-slate-50 transition-colors"
         >
           <div>
-            <span className="text-base font-semibold text-gray-900">Assumptions</span>
-            <span className="ml-2 text-sm text-gray-500">
-              (SWR {(inputs.swr * 100).toFixed(1)}%, real return {(inputs.realReturnRate * 100).toFixed(1)}%)
+            <span className="text-base font-semibold tracking-tight text-slate-900">Assumptions</span>
+            <span className="ml-2 text-sm text-slate-400 tnum">
+              SWR {(inputs.swr * 100).toFixed(1)}% · real return {(inputs.realReturnRate * 100).toFixed(1)}%
             </span>
           </div>
           <svg
-            className={`w-5 h-5 text-gray-400 transition-transform ${showAdvanced ? "rotate-180" : ""}`}
+            className={`w-5 h-5 text-slate-400 transition-transform ${showAdvanced ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -327,8 +416,8 @@ export default function RetirementForm({ onCalculate }: Props) {
           </svg>
         </button>
         {showAdvanced && (
-          <div className="px-6 pb-6 border-t border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+          <div className="px-6 sm:px-7 pb-6 border-t border-slate-100">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-5">
               <NumberInput
                 id="swr"
                 label="Safe withdrawal rate (SWR)"
@@ -368,9 +457,12 @@ export default function RetirementForm({ onCalculate }: Props) {
 
       <button
         type="submit"
-        className="w-full bg-indigo-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm text-base"
+        className="group w-full rounded-xl bg-indigo-600 text-white font-semibold py-3.5 px-6 text-base shadow-sm shadow-indigo-600/20 hover:bg-indigo-700 active:bg-indigo-800 transition-colors flex items-center justify-center gap-2"
       >
         Calculate my retirement
+        <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
       </button>
     </form>
   );

@@ -95,20 +95,25 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
     portfolioValueAtRetirement,
     swrIncomeAtRetirement,
     shortfallAtRetirement,
+    householdRetirementAge,
     needsBridge,
     bridgeYears,
     canBridgeGap,
     lisaPenaltyWarning,
     mortgagePayoff,
     drawdownYears,
+    chartMarkers,
     portfolioExhaustedAge,
     ageCanRetire,
   } = results;
 
+  const hasPartner = inputs.people.length > 1;
+  const retireAge = householdRetirementAge;
+
   const sourceLabel: Record<string, string> = {
     cash: "cash savings",
-    isa: "your ISA",
-    pension: "your pension (25% tax-free, rest taxed)",
+    isa: "the ISA",
+    pension: "the pension (25% tax-free, rest taxed)",
   };
 
   const allGood = canRetire && (!needsBridge || canBridgeGap);
@@ -160,10 +165,10 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
           <div className="min-w-0">
             <h3 className={`text-xl sm:text-2xl font-bold tracking-tight leading-tight ${verdict.title}`}>
               {allGood
-                ? `You're on track to retire at ${inputs.retirementAge}`
+                ? `You're on track to retire ${hasPartner ? "together " : ""}at ${retireAge}`
                 : bridgeProblem
-                ? "Portfolio's big enough — but the bridge gap bites"
-                : `Not yet ready to retire at ${inputs.retirementAge}`}
+                ? "Your portfolio's big enough — but the bridge gap bites"
+                : `Not yet ready to retire at ${retireAge}`}
             </h3>
             <p className={`mt-2 text-sm leading-relaxed ${verdict.body}`}>
               {allGood ? (
@@ -175,7 +180,7 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
                 </>
               ) : bridgeProblem ? (
                 <>
-                  Your overall portfolio is large enough, but you retire at {inputs.retirementAge} — before
+                  Your {hasPartner ? "combined " : ""}portfolio is large enough, but you retire at {retireAge} — before
                   pension access at {inputs.pensionAccessAge}. Your non-pension assets aren&apos;t enough to
                   cover the {bridgeYears}-year bridge gap.
                 </>
@@ -186,7 +191,7 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
                   <strong className="tnum">{fmt(shortfallAtRetirement)}/year</strong> against your{" "}
                   <span className="tnum">{fmt(inputs.targetAnnualSpending)}</span> target.
                   {ageCanRetire !== null && (
-                    <> On your current trajectory you could retire at age <strong className="tnum">{ageCanRetire}</strong>.</>
+                    <> On your current trajectory you could retire {hasPartner ? "together " : ""}at age <strong className="tnum">{ageCanRetire}</strong>.</>
                   )}
                   {ageCanRetire === null && " Consider increasing contributions or reducing your spending target."}
                 </>
@@ -199,9 +204,9 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
       {/* Warnings */}
       {lisaPenaltyWarning && (
         <Note tone="amber" label="LISA penalty warning">
-          You retire at {inputs.retirementAge}, before the LISA penalty-free access age of 60. Withdrawing
-          your LISA early incurs a 25% government penalty (you lose the bonus and ~6.25% of your own
-          contributions). The planner avoids drawing from your LISA until age 60 where possible.
+          {hasPartner ? "One of you reaches retirement" : "You retire"} before the LISA penalty-free access age
+          of 60. Withdrawing a LISA early incurs a 25% government penalty (you lose the bonus and ~6.25% of your
+          own contributions). The planner avoids drawing from a LISA until age 60 where possible.
         </Note>
       )}
 
@@ -210,16 +215,16 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
           {mortgagePayoff.fullyPaid ? (
             <>
               <span className="tnum">{fmt(mortgagePayoff.amount)}</span> is cleared from{" "}
-              {sourceLabel[mortgagePayoff.source]} at age {mortgagePayoff.age}
+              {hasPartner ? `${mortgagePayoff.personName}'s ` : ""}{sourceLabel[mortgagePayoff.source]} at age {mortgagePayoff.age}
               {mortgagePayoff.taxPaid > 0 && <>, triggering <span className="tnum">{fmt(mortgagePayoff.taxPaid)}</span> in tax</>}.
               This one-off cost is reflected in the drawdown below, and your SWR income above is based on the
               portfolio net of the mortgage.
             </>
           ) : (
             <>
-              Your chosen pot couldn&apos;t fully cover the <span className="tnum">{fmt(mortgagePayoff.amount)}</span>{" "}
-              balance at age {mortgagePayoff.age}. Consider a different source, paying it off later, or reducing
-              the balance.
+              {hasPartner ? `${mortgagePayoff.personName}'s chosen pot` : "Your chosen pot"} couldn&apos;t fully cover the{" "}
+              <span className="tnum">{fmt(mortgagePayoff.amount)}</span> balance at age {mortgagePayoff.age}. Consider a
+              different source, paying it off later, or reducing the balance.
             </>
           )}
         </Note>
@@ -227,9 +232,9 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
 
       {needsBridge && (
         <Note tone={canBridgeGap ? "indigo" : "rose"} label={`Bridge gap · ${bridgeYears} years`}>
-          You retire at {inputs.retirementAge}, before pension access at {inputs.pensionAccessAge}.{" "}
+          You retire at {retireAge}, before {hasPartner ? "either" : "your"} pension is accessible (age {inputs.pensionAccessAge}).{" "}
           {canBridgeGap
-            ? "Your ISA, cash, and GIA are sufficient to cover this gap without touching your pension."
+            ? "Your ISA, cash, and GIA are sufficient to cover this gap without touching a pension."
             : `Your non-pension assets (ISA, cash, GIA) are not sufficient to cover this ${bridgeYears}-year gap. You may need to delay retirement or grow non-pension savings.`}
         </Note>
       )}
@@ -238,7 +243,9 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
       <div>
         <div className="flex items-baseline justify-between mb-3">
           <h3 className="text-base font-semibold tracking-tight text-slate-800">At retirement</h3>
-          <span className="text-xs font-medium text-slate-400">Age {inputs.retirementAge}</span>
+          <span className="text-xs font-medium text-slate-400">
+            {hasPartner ? "Combined · age " : "Age "}{retireAge}
+          </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="Total portfolio" value={fmt(totalAtRetirement)} color="indigo" />
@@ -260,7 +267,9 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
       {/* Portfolio breakdown */}
       {pots.length > 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-base font-semibold tracking-tight text-slate-800 mb-4">Portfolio breakdown at retirement</h3>
+          <h3 className="text-base font-semibold tracking-tight text-slate-800 mb-4">
+            {hasPartner ? "Combined portfolio breakdown at retirement" : "Portfolio breakdown at retirement"}
+          </h3>
           <div className="space-y-3.5">
             {pots.map((pot) => (
               <div key={pot.label} className="flex items-center gap-3">
@@ -287,17 +296,15 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
       {/* Drawdown chart */}
       {drawdownYears.length > 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-base font-semibold tracking-tight text-slate-800 mb-1">Portfolio drawdown over time</h3>
+          <h3 className="text-base font-semibold tracking-tight text-slate-800 mb-1">
+            {hasPartner ? "Combined portfolio drawdown over time" : "Portfolio drawdown over time"}
+          </h3>
           <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-            How your portfolio is drawn down in retirement, in real (inflation-adjusted) values. Dashed lines
-            mark pension access (age {inputs.pensionAccessAge}) and state pension start (age {inputs.statePensionAge}).
+            How your {hasPartner ? "household " : ""}portfolio is drawn down in retirement, in real
+            (inflation-adjusted) values{hasPartner ? `, plotted against ${inputs.people[0].name || "your"}'s age` : ""}.
+            Dashed lines mark pension access and state pension milestones.
           </p>
-          <DrawdownChart
-            drawdownYears={drawdownYears}
-            pensionAccessAge={inputs.pensionAccessAge}
-            statePensionAge={inputs.statePensionAge}
-            retirementAge={inputs.retirementAge}
-          />
+          <DrawdownChart drawdownYears={drawdownYears} markers={chartMarkers} />
         </div>
       )}
 

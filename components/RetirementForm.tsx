@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RetirementInputs } from "@/lib/types";
+import { RetirementInputs, Person } from "@/lib/types";
 import { TAX } from "@/lib/tax";
 
 interface Props {
@@ -173,120 +173,305 @@ function Card({
   title,
   subtitle,
   children,
+  action,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
+  action?: React.ReactNode;
 }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 shadow-sm">
-      <div className="mb-5">
-        <h2 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h2>
-        {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h2>
+          {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
+        </div>
+        {action}
       </div>
       {children}
     </section>
   );
 }
 
+function makePerson(name: string): Person {
+  return {
+    name,
+    currentAge: 35,
+    retirementAge: 60,
+    portfolio: { cash: 10000, pension: 50000, isa: 20000, lisa: 5000, gia: 0 },
+    contributions: { cash: 0, pension: 6000, isa: 10000, lisa: 4000, gia: 0 },
+    eligibleForStatePension: true,
+    statePensionAnnual: TAX.fullStatePension,
+    statePensionAge: 68,
+  };
+}
+
 const defaultInputs: RetirementInputs = {
-  currentAge: 35,
-  retirementAge: 60,
-  portfolio: { cash: 10000, pension: 50000, isa: 20000, lisa: 5000, gia: 0 },
+  people: [makePerson("You")],
   hasMortgage: false,
   mortgageRemaining: 0,
   mortgagePayoffAge: 60,
   mortgagePayoffSource: "cash",
-  contributions: { cash: 0, pension: 6000, isa: 10000, lisa: 4000, gia: 0 },
-  eligibleForStatePension: true,
-  statePensionAnnual: TAX.fullStatePension,
-  statePensionAge: 68,
+  mortgagePayoffPerson: 0,
   targetAnnualSpending: 30000,
   realReturnRate: 0.04,
   swr: 0.04,
   pensionAccessAge: TAX.pensionAccessAge,
 };
 
+/**
+ * All the per-person fields. `prefix` namespaces input ids so two people don't
+ * collide; `showName` toggles the editable name field (only shown with a partner).
+ */
+function PersonFields({
+  person,
+  setPerson,
+  prefix,
+  showName,
+}: {
+  person: Person;
+  setPerson: (updater: (prev: Person) => Person) => void;
+  prefix: string;
+  showName: boolean;
+}) {
+  const setField = <K extends keyof Person>(key: K, value: Person[K]) =>
+    setPerson((prev) => ({ ...prev, [key]: value }));
+  const setPortfolio = (key: keyof Person["portfolio"], value: number) =>
+    setPerson((prev) => ({ ...prev, portfolio: { ...prev.portfolio, [key]: value } }));
+  const setContributions = (key: keyof Person["contributions"], value: number) =>
+    setPerson((prev) => ({ ...prev, contributions: { ...prev.contributions, [key]: value } }));
+
+  const yearsToRetirement = person.retirementAge - person.currentAge;
+
+  return (
+    <>
+      {showName && (
+        <div className="mb-5 max-w-xs">
+          <FieldLabel htmlFor={`${prefix}-name`} label="Name" />
+          <input
+            id={`${prefix}-name`}
+            type="text"
+            value={person.name}
+            onChange={(e) => setField("name", e.target.value)}
+            className={`${inputClass} px-3 py-2.5`}
+          />
+        </div>
+      )}
+
+      {/* About */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <NumberInput
+          id={`${prefix}-currentAge`}
+          label="Current age"
+          value={person.currentAge}
+          onChange={(v) => setField("currentAge", v)}
+          min={18}
+          max={80}
+          suffix="yrs"
+        />
+        <NumberInput
+          id={`${prefix}-retirementAge`}
+          label="Target retirement age"
+          value={person.retirementAge}
+          onChange={(v) => setField("retirementAge", v)}
+          min={person.currentAge + 1}
+          max={80}
+          suffix="yrs"
+        />
+      </div>
+      {yearsToRetirement > 0 && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg bg-indigo-50 px-3.5 py-2.5 text-sm text-indigo-700">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>
+            <span className="font-semibold tnum">{yearsToRetirement}</span> year
+            {yearsToRetirement !== 1 ? "s" : ""} until target retirement age
+          </span>
+        </div>
+      )}
+
+      {/* Current Portfolio */}
+      <div className="mt-6 pt-5 border-t border-slate-100">
+        <h3 className="text-sm font-semibold text-slate-800 mb-4">Current portfolio</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <CurrencyInput id={`${prefix}-cash`} label="Cash savings" value={person.portfolio.cash} onChange={(v) => setPortfolio("cash", v)} hint="ISA, premium bonds, savings accounts" />
+          <CurrencyInput id={`${prefix}-pension`} label="Pension (DC / SIPP)" value={person.portfolio.pension} onChange={(v) => setPortfolio("pension", v)} hint="Defined contribution or SIPP pot value" />
+          <CurrencyInput id={`${prefix}-isa`} label="Stocks & Shares ISA" value={person.portfolio.isa} onChange={(v) => setPortfolio("isa", v)} />
+          <CurrencyInput id={`${prefix}-lisa`} label="Lifetime ISA (LISA)" value={person.portfolio.lisa} onChange={(v) => setPortfolio("lisa", v)} hint="Accessible penalty-free from age 60" />
+          <CurrencyInput id={`${prefix}-gia`} label="General Investment Account (GIA)" value={person.portfolio.gia} onChange={(v) => setPortfolio("gia", v)} hint="Subject to capital gains tax on withdrawal" />
+        </div>
+      </div>
+
+      {/* Annual Contributions */}
+      <div className="mt-6 pt-5 border-t border-slate-100">
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">Annual contributions</h3>
+        <p className="text-xs text-slate-500 mb-4">How much is invested each year until age {person.retirementAge}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <CurrencyInput id={`${prefix}-contrib-cash`} label="Cash savings" value={person.contributions.cash} onChange={(v) => setContributions("cash", v)} hint="Per year" />
+          <CurrencyInput id={`${prefix}-contrib-pension`} label="Pension (gross)" value={person.contributions.pension} onChange={(v) => setContributions("pension", v)} hint="Including employer contributions and tax relief" />
+          <CurrencyInput id={`${prefix}-contrib-isa`} label="Stocks & Shares ISA" value={person.contributions.isa} onChange={(v) => setContributions("isa", v)} hint="Max £20,000/year combined ISA limit" />
+          <CurrencyInput
+            id={`${prefix}-contrib-lisa`}
+            label="Lifetime ISA"
+            value={person.contributions.lisa}
+            onChange={(v) => setContributions("lisa", v)}
+            hint={`Max £4,000/year. Gov adds 25% bonus = up to £1,000 free. Contributions until age ${TAX.lisaMaxContributionAge}.`}
+          />
+          <CurrencyInput id={`${prefix}-contrib-gia`} label="GIA" value={person.contributions.gia} onChange={(v) => setContributions("gia", v)} hint="Per year" />
+        </div>
+      </div>
+
+      {/* State Pension */}
+      <div className="mt-6 pt-5 border-t border-slate-100">
+        <h3 className="text-sm font-semibold text-slate-800 mb-4">State pension</h3>
+        <label htmlFor={`${prefix}-statePension`} className="flex items-center gap-3 mb-5 cursor-pointer">
+          <input
+            id={`${prefix}-statePension`}
+            type="checkbox"
+            checked={person.eligibleForStatePension}
+            onChange={(e) => setField("eligibleForStatePension", e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          <span className="text-sm font-medium text-slate-700">Expects to receive the UK State Pension</span>
+        </label>
+        {person.eligibleForStatePension && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <CurrencyInput
+              id={`${prefix}-statePensionAmount`}
+              label="Expected state pension (gross, per year)"
+              value={person.statePensionAnnual}
+              onChange={(v) => setField("statePensionAnnual", v)}
+              hint={`Full new state pension 2025/26 is £${TAX.fullStatePension.toLocaleString()}/year`}
+            />
+            <NumberInput
+              id={`${prefix}-statePensionAge`}
+              label="State pension age"
+              value={person.statePensionAge}
+              onChange={(v) => setField("statePensionAge", v)}
+              min={60}
+              max={75}
+              suffix="yrs"
+              hint="Currently 66–68 depending on birth year"
+            />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 export default function RetirementForm({ onCalculate }: Props) {
   const [inputs, setInputs] = useState<RetirementInputs>(defaultInputs);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  const hasPartner = inputs.people.length > 1;
+
   const set = <K extends keyof RetirementInputs>(key: K, value: RetirementInputs[K]) =>
     setInputs((prev) => ({ ...prev, [key]: value }));
 
-  const setPortfolio = (key: keyof RetirementInputs["portfolio"], value: number) =>
-    setInputs((prev) => ({ ...prev, portfolio: { ...prev.portfolio, [key]: value } }));
+  const setPerson = (index: number, updater: (prev: Person) => Person) =>
+    setInputs((prev) => ({
+      ...prev,
+      people: prev.people.map((p, i) => (i === index ? updater(p) : p)),
+    }));
 
-  const setContributions = (key: keyof RetirementInputs["contributions"], value: number) =>
-    setInputs((prev) => ({ ...prev, contributions: { ...prev.contributions, [key]: value } }));
+  const addPartner = () =>
+    setInputs((prev) => ({ ...prev, people: [...prev.people, makePerson("Your partner")] }));
+
+  const removePartner = () =>
+    setInputs((prev) => ({
+      ...prev,
+      people: prev.people.slice(0, 1),
+      mortgagePayoffPerson: 0,
+    }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onCalculate(inputs);
   };
 
-  const yearsToRetirement = inputs.retirementAge - inputs.currentAge;
+  // Mortgage payoff is anchored to the primary person's age; it must land on or
+  // after the household actually retires (the later of the two retirement ages).
+  const householdRetireAge =
+    inputs.people[0].currentAge +
+    Math.max(...inputs.people.map((p) => p.retirementAge - p.currentAge));
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* About You */}
-      <Card title="About you" subtitle="Basic details about your timeline">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <NumberInput
-            id="currentAge"
-            label="Current age"
-            value={inputs.currentAge}
-            onChange={(v) => set("currentAge", v)}
-            min={18}
-            max={80}
-            suffix="yrs"
-          />
-          <NumberInput
-            id="retirementAge"
-            label="Target retirement age"
-            value={inputs.retirementAge}
-            onChange={(v) => set("retirementAge", v)}
-            min={inputs.currentAge + 1}
-            max={80}
-            suffix="yrs"
-          />
-        </div>
-        {yearsToRetirement > 0 && (
-          <div className="mt-4 flex items-center gap-2 rounded-lg bg-indigo-50 px-3.5 py-2.5 text-sm text-indigo-700">
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>
-              <span className="font-semibold tnum">{yearsToRetirement}</span> year
-              {yearsToRetirement !== 1 ? "s" : ""} until your target retirement age
-            </span>
-          </div>
-        )}
+      {/* Person 1 */}
+      <Card
+        title={hasPartner ? inputs.people[0].name || "You" : "About you"}
+        subtitle={hasPartner ? "Your details, savings and contributions" : "Your timeline, savings and contributions"}
+      >
+        <PersonFields
+          person={inputs.people[0]}
+          setPerson={(updater) => setPerson(0, updater)}
+          prefix="p0"
+          showName={hasPartner}
+        />
       </Card>
 
-      {/* Current Portfolio */}
-      <Card title="Current portfolio" subtitle="Your savings and investments today">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <CurrencyInput id="cash" label="Cash savings" value={inputs.portfolio.cash} onChange={(v) => setPortfolio("cash", v)} hint="ISA, premium bonds, savings accounts" />
-          <CurrencyInput id="pension" label="Pension (DC / SIPP)" value={inputs.portfolio.pension} onChange={(v) => setPortfolio("pension", v)} hint="Defined contribution or SIPP pot value" />
-          <CurrencyInput id="isa" label="Stocks & Shares ISA" value={inputs.portfolio.isa} onChange={(v) => setPortfolio("isa", v)} />
-          <CurrencyInput id="lisa" label="Lifetime ISA (LISA)" value={inputs.portfolio.lisa} onChange={(v) => setPortfolio("lisa", v)} hint="Accessible penalty-free from age 60" />
-          <CurrencyInput id="gia" label="General Investment Account (GIA)" value={inputs.portfolio.gia} onChange={(v) => setPortfolio("gia", v)} hint="Subject to capital gains tax on withdrawal" />
-        </div>
+      {/* Partner */}
+      {hasPartner ? (
+        <Card
+          title={inputs.people[1].name || "Your partner"}
+          subtitle="Your partner's details, savings and contributions"
+          action={
+            <button
+              type="button"
+              onClick={removePartner}
+              className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-rose-600 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Remove
+            </button>
+          }
+        >
+          <PersonFields
+            person={inputs.people[1]}
+            setPerson={(updater) => setPerson(1, updater)}
+            prefix="p1"
+            showName
+          />
+        </Card>
+      ) : (
+        <button
+          type="button"
+          onClick={addPartner}
+          className="group w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white/50 px-6 py-5 text-left hover:border-indigo-400 hover:bg-indigo-50/40 transition-colors flex items-center gap-4"
+        >
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition-colors">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Add your partner</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Planning together? Add a partner to see a combined household view. Optional — leave it out to plan just for yourself.
+            </p>
+          </div>
+        </button>
+      )}
 
-        {/* Mortgage */}
-        <div className="mt-6 pt-5 border-t border-slate-100">
-          <label htmlFor="hasMortgage" className="flex items-center gap-3 cursor-pointer">
-            <input
-              id="hasMortgage"
-              type="checkbox"
-              checked={inputs.hasMortgage}
-              onChange={(e) => set("hasMortgage", e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <span className="text-sm font-medium text-slate-700">I have an outstanding mortgage</span>
-          </label>
-          {inputs.hasMortgage && (
+      {/* Mortgage (household) */}
+      <Card title="Mortgage" subtitle="An outstanding home loan for the household">
+        <label htmlFor="hasMortgage" className="flex items-center gap-3 cursor-pointer">
+          <input
+            id="hasMortgage"
+            type="checkbox"
+            checked={inputs.hasMortgage}
+            onChange={(e) => set("hasMortgage", e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          <span className="text-sm font-medium text-slate-700">We have an outstanding mortgage</span>
+        </label>
+        {inputs.hasMortgage && (
+          <>
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-5">
               <CurrencyInput
                 id="mortgageRemaining"
@@ -297,13 +482,13 @@ export default function RetirementForm({ onCalculate }: Props) {
               />
               <NumberInput
                 id="mortgagePayoffAge"
-                label="Pay off at age"
+                label={hasPartner ? `Pay off at ${inputs.people[0].name || "your"}'s age` : "Pay off at age"}
                 value={inputs.mortgagePayoffAge}
                 onChange={(v) => set("mortgagePayoffAge", v)}
-                min={inputs.retirementAge}
+                min={householdRetireAge}
                 max={100}
                 suffix="yrs"
-                hint={`On/after retirement (${inputs.retirementAge})`}
+                hint={`On/after retirement (${householdRetireAge})`}
               />
               <SelectInput
                 id="mortgagePayoffSource"
@@ -318,77 +503,44 @@ export default function RetirementForm({ onCalculate }: Props) {
                 hint="Pot used first; overflows if short"
               />
             </div>
-          )}
-          {inputs.hasMortgage && inputs.mortgagePayoffSource === "pension" && (
-            <p className="mt-3 text-xs text-slate-500 leading-snug">
-              Drawn as a pension lump sum: 25% tax-free, the rest taxed as income. Only available once your
-              pension is accessible (age {inputs.pensionAccessAge}).
-            </p>
-          )}
-        </div>
-      </Card>
-
-      {/* Annual Contributions */}
-      <Card title="Annual contributions" subtitle={`How much you'll invest each year until age ${inputs.retirementAge}`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <CurrencyInput id="contrib-cash" label="Cash savings" value={inputs.contributions.cash} onChange={(v) => setContributions("cash", v)} hint="Per year" />
-          <CurrencyInput id="contrib-pension" label="Pension (gross)" value={inputs.contributions.pension} onChange={(v) => setContributions("pension", v)} hint="Including employer contributions and tax relief" />
-          <CurrencyInput id="contrib-isa" label="Stocks & Shares ISA" value={inputs.contributions.isa} onChange={(v) => setContributions("isa", v)} hint="Max £20,000/year combined ISA limit" />
-          <CurrencyInput
-            id="contrib-lisa"
-            label="Lifetime ISA"
-            value={inputs.contributions.lisa}
-            onChange={(v) => setContributions("lisa", v)}
-            hint={`Max £4,000/year. Gov adds 25% bonus = up to £1,000 free. Contributions until age ${TAX.lisaMaxContributionAge}.`}
-          />
-          <CurrencyInput id="contrib-gia" label="GIA" value={inputs.contributions.gia} onChange={(v) => setContributions("gia", v)} hint="Per year" />
-        </div>
-      </Card>
-
-      {/* State Pension */}
-      <Card title="State pension" subtitle="UK new state pension from age 68">
-        <label htmlFor="statePension" className="flex items-center gap-3 mb-5 cursor-pointer">
-          <input
-            id="statePension"
-            type="checkbox"
-            checked={inputs.eligibleForStatePension}
-            onChange={(e) => set("eligibleForStatePension", e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-          />
-          <span className="text-sm font-medium text-slate-700">I expect to receive the UK State Pension</span>
-        </label>
-        {inputs.eligibleForStatePension && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <CurrencyInput
-              id="statePensionAmount"
-              label="Expected state pension (gross, per year)"
-              value={inputs.statePensionAnnual}
-              onChange={(v) => set("statePensionAnnual", v)}
-              hint={`Full new state pension 2025/26 is £${TAX.fullStatePension.toLocaleString()}/year`}
-            />
-            <NumberInput
-              id="statePensionAge"
-              label="State pension age"
-              value={inputs.statePensionAge}
-              onChange={(v) => set("statePensionAge", v)}
-              min={60}
-              max={75}
-              suffix="yrs"
-              hint="Currently 66–68 depending on birth year"
-            />
-          </div>
+            {hasPartner && (
+              <div className="mt-5 max-w-xs">
+                <SelectInput
+                  id="mortgagePayoffPerson"
+                  label="Whose pot pays it off"
+                  value={String(inputs.mortgagePayoffPerson)}
+                  onChange={(v) => set("mortgagePayoffPerson", parseInt(v, 10))}
+                  options={inputs.people.map((p, i) => ({ value: String(i), label: p.name || `Person ${i + 1}` }))}
+                  hint="The lump sum is drawn from this person's pots"
+                />
+              </div>
+            )}
+            {inputs.mortgagePayoffSource === "pension" && (
+              <p className="mt-3 text-xs text-slate-500 leading-snug">
+                Drawn as a pension lump sum: 25% tax-free, the rest taxed as income. Only available once that
+                person&apos;s pension is accessible (age {inputs.pensionAccessAge}).
+              </p>
+            )}
+          </>
         )}
       </Card>
 
-      {/* Retirement Spending */}
-      <Card title="Retirement spending" subtitle="How much you want to spend each year in retirement">
+      {/* Retirement Spending (household) */}
+      <Card
+        title="Retirement spending"
+        subtitle={hasPartner ? "Combined household spending each year in retirement" : "How much you want to spend each year in retirement"}
+      >
         <div className="max-w-sm">
           <CurrencyInput
             id="targetSpending"
             label="Target annual spending (post-tax)"
             value={inputs.targetAnnualSpending}
             onChange={(v) => set("targetAnnualSpending", v)}
-            hint="The PLSA recommends £37,000/year for a 'comfortable' retirement for one person"
+            hint={
+              hasPartner
+                ? "The PLSA recommends £58,000/year for a 'comfortable' retirement for a couple"
+                : "The PLSA recommends £37,000/year for a 'comfortable' retirement for one person"
+            }
           />
         </div>
       </Card>
@@ -459,7 +611,7 @@ export default function RetirementForm({ onCalculate }: Props) {
         type="submit"
         className="group w-full rounded-xl bg-indigo-600 text-white font-semibold py-3.5 px-6 text-base shadow-sm shadow-indigo-600/20 hover:bg-indigo-700 active:bg-indigo-800 transition-colors flex items-center justify-center gap-2"
       >
-        Calculate my retirement
+        {hasPartner ? "Calculate our retirement" : "Calculate my retirement"}
         <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
         </svg>

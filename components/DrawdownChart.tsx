@@ -11,13 +11,11 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { DrawdownYear } from "@/lib/types";
+import { DrawdownYear, ChartMarker } from "@/lib/types";
 
 interface Props {
   drawdownYears: DrawdownYear[];
-  pensionAccessAge: number;
-  statePensionAge: number;
-  retirementAge: number;
+  markers: ChartMarker[];
 }
 
 function fmt(value: number): string {
@@ -68,7 +66,7 @@ function CustomTooltip({
   );
 }
 
-export default function DrawdownChart({ drawdownYears, pensionAccessAge, statePensionAge, retirementAge }: Props) {
+export default function DrawdownChart({ drawdownYears, markers }: Props) {
   const data = drawdownYears.map((y) => ({
     age: y.age,
     Pension: Math.round(y.pension),
@@ -112,22 +110,15 @@ export default function DrawdownChart({ drawdownYears, pensionAccessAge, statePe
             formatter={(value) => <span className="text-slate-600">{value}</span>}
           />
 
-          {pensionAccessAge > retirementAge && (
+          {markers.map((m, i) => (
             <ReferenceLine
-              x={pensionAccessAge}
-              stroke={COLOURS.pension}
+              key={`${m.age}-${m.label}-${i}`}
+              x={m.age}
+              stroke={m.color}
               strokeDasharray="4 2"
-              label={{ value: "Pension access", position: "top", fontSize: 10, fill: COLOURS.pension }}
+              label={{ value: m.label, position: "top", fontSize: 10, fill: m.color }}
             />
-          )}
-          {statePensionAge > retirementAge && (
-            <ReferenceLine
-              x={statePensionAge}
-              stroke={COLOURS.gia}
-              strokeDasharray="4 2"
-              label={{ value: "State pension", position: "top", fontSize: 10, fill: COLOURS.gia }}
-            />
-          )}
+          ))}
 
           <Area type="monotone" dataKey="Pension" stackId="1" stroke={COLOURS.pension} fill={`url(#grad-pension)`} />
           <Area type="monotone" dataKey="ISA" stackId="1" stroke={COLOURS.isa} fill={`url(#grad-isa)`} />

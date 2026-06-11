@@ -22,6 +22,15 @@ function FieldLabel({ htmlFor, label, hint }: { htmlFor: string; label: string; 
   );
 }
 
+// Group the integer part with thousands separators while leaving any decimal
+// portion (and a trailing ".") untouched so the field reads £50,000 as you type.
+function groupThousands(v: string): string {
+  if (v === "") return "";
+  const [intPart, ...rest] = v.split(".");
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return rest.length ? `${grouped}.${rest.join("")}` : grouped;
+}
+
 function CurrencyInput({
   label,
   value,
@@ -35,11 +44,11 @@ function CurrencyInput({
   hint?: string;
   id: string;
 }) {
-  const [raw, setRaw] = useState(value === 0 ? "" : String(value));
+  const [raw, setRaw] = useState(value === 0 ? "" : groupThousands(String(value)));
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value.replace(/[^0-9.]/g, "");
-    setRaw(v);
+    setRaw(groupThousands(v));
     const n = parseFloat(v);
     onChange(isNaN(n) ? 0 : n);
   };

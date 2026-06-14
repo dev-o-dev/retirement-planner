@@ -55,9 +55,26 @@ export default function Home() {
             Find out if you can <span className="text-indigo-600">retire</span>.
           </h2>
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-slate-600">
-            Fill in your details below to see if you&apos;re on track. The planner models pension drawdown,
-            ISA and LISA rules, UK income tax, capital gains tax, and the state pension — all using 2025/26
-            UK tax bands.
+            Answer a few questions about your savings, investments, and spending plans, and we&apos;ll
+            project your finances from today through to age 100 — all in today&apos;s money (adjusted
+            for inflation).
+          </p>
+          <ul className="mt-4 max-w-xl space-y-1.5 text-sm text-slate-500">
+            <li className="flex gap-2.5">
+              <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-indigo-400" />
+              How your pots grow until retirement, including the Lifetime ISA bonus
+            </li>
+            <li className="flex gap-2.5">
+              <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-indigo-400" />
+              How you&apos;d draw down tax-efficiently — ISA first, then your pension, then taxable accounts
+            </li>
+            <li className="flex gap-2.5">
+              <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-indigo-400" />
+              Whether you can bridge the gap if you retire before you can access your pension or State Pension
+            </li>
+          </ul>
+          <p className="mt-4 max-w-xl text-sm text-slate-400">
+            Everything runs in your browser — nothing is saved or sent anywhere.
           </p>
         </div>
       </div>
@@ -79,8 +96,11 @@ export default function Home() {
       </main>
 
       <footer className="mt-4 border-t border-slate-200">
-        <div className="max-w-3xl mx-auto px-5 py-8 text-center text-xs text-slate-400">
-          Not financial advice. Figures are estimates based on real returns and current UK tax rules.
+        <div className="max-w-3xl mx-auto px-5 py-8 text-center text-xs text-slate-400 leading-relaxed">
+          This tool provides estimates only and is not financial advice. It assumes 2025/26 tax rules,
+          allowances, and access ages remain unchanged for the rest of your life, which in reality they
+          won&apos;t. For advice tailored to your circumstances, speak to a regulated financial adviser or
+          use MoneyHelper&apos;s free guidance service.
         </div>
       </footer>
     </div>

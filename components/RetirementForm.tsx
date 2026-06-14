@@ -252,6 +252,7 @@ function PersonFields({
     setPerson((prev) => ({ ...prev, contributions: { ...prev.contributions, [key]: value } }));
 
   const yearsToRetirement = person.retirementAge - person.currentAge;
+  const retirementHorizon = 100 - person.retirementAge;
 
   return (
     <>
@@ -269,6 +270,10 @@ function PersonFields({
       )}
 
       {/* About */}
+      <p className="text-xs text-slate-500 mb-4 leading-snug">
+        These two ages set your time horizon — how long your money has to grow, and how long it needs to
+        last.
+      </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <NumberInput
           id={`${prefix}-currentAge`}
@@ -296,45 +301,117 @@ function PersonFields({
           </svg>
           <span>
             <span className="font-semibold tnum">{yearsToRetirement}</span> year
-            {yearsToRetirement !== 1 ? "s" : ""} until target retirement age
+            {yearsToRetirement !== 1 ? "s" : ""} until your target retirement age
+            {retirementHorizon > 0 && (
+              <>
+                {" "}— followed by up to <span className="font-semibold tnum">{retirementHorizon}</span> year
+                {retirementHorizon !== 1 ? "s" : ""} in retirement (we project to age 100)
+              </>
+            )}
           </span>
         </div>
       )}
 
       {/* Current Portfolio */}
       <div className="mt-6 pt-5 border-t border-slate-100">
-        <h3 className="text-sm font-semibold text-slate-800 mb-4">Current portfolio</h3>
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">Current portfolio</h3>
+        <p className="text-xs text-slate-500 mb-4 leading-snug">
+          Enter today&apos;s balances. We&apos;ll grow each pot using your assumptions below and apply UK
+          rules for ISAs, LISAs, and pensions automatically.
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <CurrencyInput id={`${prefix}-cash`} label="Cash savings" value={person.portfolio.cash} onChange={(v) => setPortfolio("cash", v)} hint="ISA, premium bonds, savings accounts" />
-          <CurrencyInput id={`${prefix}-pension`} label="Pension (DC / SIPP)" value={person.portfolio.pension} onChange={(v) => setPortfolio("pension", v)} hint="Defined contribution or SIPP pot value" />
-          <CurrencyInput id={`${prefix}-isa`} label="Stocks & Shares ISA" value={person.portfolio.isa} onChange={(v) => setPortfolio("isa", v)} />
-          <CurrencyInput id={`${prefix}-lisa`} label="Lifetime ISA (LISA)" value={person.portfolio.lisa} onChange={(v) => setPortfolio("lisa", v)} hint="Accessible penalty-free from age 60" />
-          <CurrencyInput id={`${prefix}-gia`} label="General Investment Account (GIA)" value={person.portfolio.gia} onChange={(v) => setPortfolio("gia", v)} hint="Subject to capital gains tax on withdrawal" />
+          <CurrencyInput
+            id={`${prefix}-cash`}
+            label="Cash savings"
+            value={person.portfolio.cash}
+            onChange={(v) => setPortfolio("cash", v)}
+            hint="Easy-access savings, fixed-term bonds, Premium Bonds, and cash ISAs. Your most flexible pot — no tax due on withdrawal."
+          />
+          <CurrencyInput
+            id={`${prefix}-pension`}
+            label="Pension (DC / SIPP)"
+            value={person.portfolio.pension}
+            onChange={(v) => setPortfolio("pension", v)}
+            hint="Workplace defined contribution pensions and personal pensions/SIPPs. Final salary (defined benefit) pensions aren't modelled — if you have one, treat it as extra guaranteed income alongside your State Pension."
+          />
+          <CurrencyInput
+            id={`${prefix}-isa`}
+            label="Stocks & Shares ISA"
+            value={person.portfolio.isa}
+            onChange={(v) => setPortfolio("isa", v)}
+            hint="Grows tax-free and can be withdrawn completely tax-free, at any age."
+          />
+          <CurrencyInput
+            id={`${prefix}-lisa`}
+            label="Lifetime ISA (LISA)"
+            value={person.portfolio.lisa}
+            onChange={(v) => setPortfolio("lisa", v)}
+            hint={`Tax-free growth plus a 25% government top-up while you're contributing (up to age ${TAX.lisaMaxContributionAge}). Withdrawals before age ${TAX.lisaAccessAge} — other than to buy a first home — incur a 25% government penalty.`}
+          />
+          <CurrencyInput
+            id={`${prefix}-gia`}
+            label="General Investment Account (GIA)"
+            value={person.portfolio.gia}
+            onChange={(v) => setPortfolio("gia", v)}
+            hint={`Held outside a tax wrapper. When you sell, gains above the £${TAX.cgtAnnualExempt.toLocaleString()} annual exempt amount are taxed at ${(TAX.cgtBasicRate * 100).toFixed(0)}% (basic rate) or ${(TAX.cgtHigherRate * 100).toFixed(0)}% (higher rate).`}
+          />
         </div>
       </div>
 
       {/* Annual Contributions */}
       <div className="mt-6 pt-5 border-t border-slate-100">
         <h3 className="text-sm font-semibold text-slate-800 mb-1">Annual contributions</h3>
-        <p className="text-xs text-slate-500 mb-4">How much is invested each year until age {person.retirementAge}</p>
+        <p className="text-xs text-slate-500 mb-4 leading-snug">
+          How much you&apos;ll add to each pot every year, in today&apos;s money, until you retire at{" "}
+          {person.retirementAge}. We&apos;ll apply growth, LISA bonuses, and contribution limits
+          automatically.
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <CurrencyInput id={`${prefix}-contrib-cash`} label="Cash savings" value={person.contributions.cash} onChange={(v) => setContributions("cash", v)} hint="Per year" />
-          <CurrencyInput id={`${prefix}-contrib-pension`} label="Pension (gross)" value={person.contributions.pension} onChange={(v) => setContributions("pension", v)} hint="Including employer contributions and tax relief" />
-          <CurrencyInput id={`${prefix}-contrib-isa`} label="Stocks & Shares ISA" value={person.contributions.isa} onChange={(v) => setContributions("isa", v)} hint="Max £20,000/year combined ISA limit" />
+          <CurrencyInput
+            id={`${prefix}-contrib-cash`}
+            label="Cash savings"
+            value={person.contributions.cash}
+            onChange={(v) => setContributions("cash", v)}
+            hint="Per year, in today's money."
+          />
+          <CurrencyInput
+            id={`${prefix}-contrib-pension`}
+            label="Pension (gross)"
+            value={person.contributions.pension}
+            onChange={(v) => setContributions("pension", v)}
+            hint="The total going in each year — your contributions plus employer contributions and tax relief. The pension annual allowance is £60,000/year."
+          />
+          <CurrencyInput
+            id={`${prefix}-contrib-isa`}
+            label="Stocks & Shares ISA"
+            value={person.contributions.isa}
+            onChange={(v) => setContributions("isa", v)}
+            hint="Counts towards your £20,000/year combined ISA allowance (Stocks & Shares ISA + Lifetime ISA + Cash ISA)."
+          />
           <CurrencyInput
             id={`${prefix}-contrib-lisa`}
             label="Lifetime ISA"
             value={person.contributions.lisa}
             onChange={(v) => setContributions("lisa", v)}
-            hint={`Max £4,000/year. Gov adds 25% bonus = up to £1,000 free. Contributions until age ${TAX.lisaMaxContributionAge}.`}
+            hint={`Counts towards your £20,000 ISA allowance. The government adds a ${(TAX.lisaBonusRate * 100).toFixed(0)}% bonus on contributions up to £${TAX.lisaMaxContribution.toLocaleString()}/year (max £${(TAX.lisaMaxContribution * TAX.lisaBonusRate).toLocaleString()}/year bonus) until your ${TAX.lisaMaxContributionAge}th birthday. You must open a LISA before turning 40.`}
           />
-          <CurrencyInput id={`${prefix}-contrib-gia`} label="GIA" value={person.contributions.gia} onChange={(v) => setContributions("gia", v)} hint="Per year" />
+          <CurrencyInput
+            id={`${prefix}-contrib-gia`}
+            label="GIA"
+            value={person.contributions.gia}
+            onChange={(v) => setContributions("gia", v)}
+            hint="Per year, in today's money. Usually only worth using once you're already putting £20,000/year into ISAs."
+          />
         </div>
       </div>
 
       {/* State Pension */}
       <div className="mt-6 pt-5 border-t border-slate-100">
-        <h3 className="text-sm font-semibold text-slate-800 mb-4">State pension</h3>
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">State pension</h3>
+        <p className="text-xs text-slate-500 mb-4 leading-snug">
+          The State Pension is a flat-rate government pension, separate from your own savings. Most people
+          need 35 qualifying years of National Insurance contributions for the full amount.
+        </p>
         <label htmlFor={`${prefix}-statePension`} className="flex items-center gap-3 mb-5 cursor-pointer">
           <input
             id={`${prefix}-statePension`}
@@ -352,7 +429,7 @@ function PersonFields({
               label="Expected state pension (gross, per year)"
               value={person.statePensionAnnual}
               onChange={(v) => setField("statePensionAnnual", v)}
-              hint={`Full new state pension 2025/26 is £${TAX.fullStatePension.toLocaleString()}/year`}
+              hint={`The full new State Pension for 2025/26 is £${TAX.fullStatePension.toLocaleString()}/year (£221.20/week). Gaps in your National Insurance record can reduce this — check your forecast on the gov.uk State Pension forecast service.`}
             />
             <NumberInput
               id={`${prefix}-statePensionAge`}
@@ -362,7 +439,7 @@ function PersonFields({
               min={60}
               max={75}
               suffix="yrs"
-              hint="Currently 66–68 depending on birth year"
+              hint="Currently 66, rising to 67 by 2028 and 68 by 2046. The exact age depends on your date of birth — check yours on gov.uk."
             />
           </div>
         )}
@@ -537,7 +614,7 @@ export default function RetirementForm({ onCalculate }: Props) {
       {/* Retirement Spending (household) */}
       <Card
         title="Retirement spending"
-        subtitle={hasPartner ? "Combined household spending each year in retirement" : "How much you want to spend each year in retirement"}
+        subtitle="The amount you want to have available to spend, after any tax, each year — in today's money. This is the number the whole plan is built around."
       >
         <div className="max-w-sm">
           <CurrencyInput
@@ -547,8 +624,8 @@ export default function RetirementForm({ onCalculate }: Props) {
             onChange={(v) => set("targetAnnualSpending", v)}
             hint={
               hasPartner
-                ? "The PLSA recommends £58,000/year for a 'comfortable' retirement for a couple"
-                : "The PLSA recommends £37,000/year for a 'comfortable' retirement for one person"
+                ? "For reference, the PLSA's 2025 Retirement Living Standards for a two-person household are roughly £21,600/year (minimum), £43,900/year (moderate), and £60,000/year (comfortable)."
+                : "For reference, the PLSA's 2025 Retirement Living Standards for a one-person household are roughly £13,400/year (minimum), £31,700/year (moderate), and £43,900/year (comfortable)."
             }
           />
         </div>
@@ -578,7 +655,11 @@ export default function RetirementForm({ onCalculate }: Props) {
         </button>
         {showAdvanced && (
           <div className="px-6 sm:px-7 pb-6 border-t border-slate-100">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-5">
+            <p className="text-xs text-slate-500 mt-5 mb-1 leading-snug">
+              These settings drive every projection below. The defaults are sensible starting points, but
+              you can stress-test your plan by adjusting them.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-4">
               <NumberInput
                 id="swr"
                 label="Safe withdrawal rate (SWR)"
@@ -588,7 +669,7 @@ export default function RetirementForm({ onCalculate }: Props) {
                 max={10}
                 step={0.1}
                 suffix="%"
-                hint="Classic 4% rule. Higher = more aggressive."
+                hint="The percentage of your portfolio you withdraw in your first year of retirement (then increase with inflation each year after). 4% comes from US research (the 'Trinity Study') on portfolios lasting 30+ years; some planners now suggest 3-3.5% for extra safety."
               />
               <NumberInput
                 id="realReturn"
@@ -599,7 +680,7 @@ export default function RetirementForm({ onCalculate }: Props) {
                 max={15}
                 step={0.1}
                 suffix="%"
-                hint="Inflation-adjusted. 4% is a common assumption."
+                hint="Your investment growth rate after subtracting inflation. Globally diversified equities have historically returned around 4-5% real over the long term; a more cautious, bond-heavy portfolio might be closer to 1-2%."
               />
               <NumberInput
                 id="pensionAccess"
@@ -609,7 +690,7 @@ export default function RetirementForm({ onCalculate }: Props) {
                 min={50}
                 max={65}
                 suffix="yrs"
-                hint="Minimum pension access age (rising to 57 in 2028)"
+                hint="Known as the 'Normal Minimum Pension Age'. Currently 55, rising to 57 from 6 April 2028. It has historically stayed 10 years below State Pension age, so it may rise further in future."
               />
             </div>
           </div>

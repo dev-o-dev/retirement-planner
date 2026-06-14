@@ -1,6 +1,7 @@
 "use client";
 
 import { RetirementResults, RetirementInputs } from "@/lib/types";
+import { TAX } from "@/lib/tax";
 import DrawdownChart from "./DrawdownChart";
 
 interface Props {
@@ -120,6 +121,11 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
   const bridgeProblem = canRetire && needsBridge && !canBridgeGap;
   const totalAtRetirement = portfolioValueAtRetirement;
 
+  const surplus = swrIncomeAtRetirement - inputs.targetAnnualSpending;
+  const surplusPct =
+    inputs.targetAnnualSpending > 0 ? Math.round((surplus / inputs.targetAnnualSpending) * 100) : 0;
+  const yearsToRetirement = inputs.people[0].retirementAge - inputs.people[0].currentAge;
+
   const verdict = allGood
     ? {
         ring: "border-emerald-300 bg-gradient-to-br from-emerald-50 to-white",
@@ -176,7 +182,8 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
                   At {(inputs.swr * 100).toFixed(0)}% SWR, your projected portfolio of{" "}
                   <strong className="tnum">{fmt(totalAtRetirement)}</strong> can sustain{" "}
                   <strong className="tnum">{fmt(swrIncomeAtRetirement)}/year</strong> — exceeding your{" "}
-                  <span className="tnum">{fmt(inputs.targetAnnualSpending)}</span> target.
+                  <span className="tnum">{fmt(inputs.targetAnnualSpending)}</span> target by{" "}
+                  <strong className="tnum">{fmt(surplus)}/year</strong> ({surplusPct}% buffer).
                 </>
               ) : bridgeProblem ? (
                 <>
@@ -193,7 +200,8 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
                   {ageCanRetire !== null && (
                     <> On your current trajectory you could retire {hasPartner ? "together " : ""}at age <strong className="tnum">{ageCanRetire}</strong>.</>
                   )}
-                  {ageCanRetire === null && " Consider increasing contributions or reducing your spending target."}
+                  {ageCanRetire === null &&
+                    ` Consider increasing your annual contributions, working a little longer, or reducing your target spending — even small changes compound significantly over ${yearsToRetirement} years.`}
                 </>
               )}
             </p>
@@ -262,14 +270,23 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
             color={portfolioExhaustedAge === null ? "emerald" : portfolioExhaustedAge < 85 ? "rose" : "amber"}
           />
         </div>
+        <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+          &apos;Portfolio lasts to&apos; shows the age your invested accounts reach zero if you keep
+          withdrawing {fmt(inputs.targetAnnualSpending)}/year in today&apos;s money (excluding any ongoing
+          State Pension, which is added separately each year).
+        </p>
       </div>
 
       {/* Portfolio breakdown */}
       {pots.length > 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-base font-semibold tracking-tight text-slate-800 mb-4">
+          <h3 className="text-base font-semibold tracking-tight text-slate-800 mb-1">
             {hasPartner ? "Combined portfolio breakdown at retirement" : "Portfolio breakdown at retirement"}
           </h3>
+          <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+            This is how your portfolio is split across accounts when you retire. Each account is taxed
+            differently when you draw on it — see the notes below.
+          </p>
           <div className="space-y-3.5">
             {pots.map((pot) => (
               <div key={pot.label} className="flex items-center gap-3">
@@ -300,9 +317,13 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
             {hasPartner ? "Combined portfolio drawdown over time" : "Portfolio drawdown over time"}
           </h3>
           <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-            How your {hasPartner ? "household " : ""}portfolio is drawn down in retirement, in real
-            (inflation-adjusted) values{hasPartner ? `, plotted against ${inputs.people[0].name || "your"}'s age` : ""}.
-            Dashed lines mark pension access and state pension milestones.
+            Each band shows the remaining balance in that account over time, in today&apos;s money
+            {hasPartner ? `, plotted against ${inputs.people[0].name || "your"}'s age` : ""}. We draw down
+            tax-efficiently — your ISA first (tax-free), then your Lifetime ISA once you turn{" "}
+            {TAX.lisaAccessAge}, then your pension from age {inputs.pensionAccessAge} (using the{" "}
+            {(TAX.pensionTaxFreeFraction * 100).toFixed(0)}% tax-free portion of each withdrawal), then your
+            GIA (subject to CGT) — with cash used to cover shortfalls throughout. Dashed lines mark when{" "}
+            {hasPartner ? "each of your" : "your"} pension and State Pension become available.
           </p>
           <DrawdownChart drawdownYears={drawdownYears} markers={chartMarkers} />
         </div>
@@ -316,6 +337,11 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
           </svg>
           Show year-by-year breakdown
         </summary>
+        <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+          &apos;Tax paid&apos; includes income tax on pension/State Pension withdrawals plus capital gains
+          tax on GIA sales that year. &apos;State pension&apos; shows your net (after-tax) State Pension
+          income for that year, where applicable.
+        </p>
         <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="min-w-full text-xs tnum">
             <thead className="bg-slate-50">
@@ -348,9 +374,13 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
 
       {/* Disclaimer */}
       <p className="text-xs text-slate-400 leading-relaxed border-t border-slate-200 pt-5">
-        This planner uses 2025/26 UK tax bands and assumes they remain constant. All values are in real
-        (inflation-adjusted) terms using a {(inputs.realReturnRate * 100).toFixed(1)}% annual real return.
-        This is not financial advice. For personalised advice, consult a regulated financial adviser.
+        This planner uses 2025/26 UK Income Tax, Capital Gains Tax, ISA, Lifetime ISA, and pension rules,
+        and assumes these — including allowances, thresholds, and access ages — remain unchanged for the
+        rest of your life, which in reality they won&apos;t. All figures are shown in today&apos;s money,
+        assuming your investments grow at {(inputs.realReturnRate * 100).toFixed(1)}% per year after
+        inflation. It does not account for defined benefit (final salary) pensions, inheritance tax, care
+        costs, or changes in your circumstances. This is not financial advice — for a plan tailored to you,
+        speak to a regulated financial adviser.
       </p>
     </div>
   );

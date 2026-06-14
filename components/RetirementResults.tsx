@@ -52,6 +52,8 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
 
   const allGood = canRetire && (!needsBridge || canBridgeGap);
   const totalAtRetirement = portfolioValueAtRetirement;
+  const surplus = swrIncomeAtRetirement - inputs.targetAnnualSpending;
+  const surplusPct = inputs.targetAnnualSpending > 0 ? (surplus / inputs.targetAnnualSpending) * 100 : 0;
 
   const pots = [
     { label: "Pension (DC/SIPP)", value: portfolioAtRetirement.pension, color: "bg-indigo-500", note: "Accessible from age " + inputs.pensionAccessAge },
@@ -103,7 +105,8 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
                   At {(inputs.swr * 100).toFixed(0)}% SWR, your projected portfolio of{" "}
                   <strong>{fmt(totalAtRetirement)}</strong> can sustain{" "}
                   <strong>{fmt(swrIncomeAtRetirement)}/year</strong> — exceeding your{" "}
-                  {fmt(inputs.targetAnnualSpending)} target.
+                  {fmt(inputs.targetAnnualSpending)} target by{" "}
+                  <strong>{fmt(surplus)}/year</strong> ({surplusPct.toFixed(0)}% buffer).
                 </>
               ) : canRetire && needsBridge && !canBridgeGap ? (
                 <>
@@ -120,7 +123,13 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
                   {ageCanRetire !== null && (
                     <> On your current trajectory you could retire at age <strong>{ageCanRetire}</strong>.</>
                   )}
-                  {ageCanRetire === null && " Consider increasing contributions or reducing your spending target."}
+                  {ageCanRetire === null && (
+                    <>
+                      {" "}Consider increasing your annual contributions, working a little longer, or
+                      reducing your target spending — even small changes compound significantly over{" "}
+                      {inputs.retirementAge - inputs.currentAge} years.
+                    </>
+                  )}
                 </>
               )}
             </p>
@@ -183,12 +192,21 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
             }
           />
         </div>
+        <p className="text-xs text-gray-400 mt-3">
+          &ldquo;Portfolio lasts to&rdquo; shows the age your invested accounts reach zero if you
+          keep withdrawing {fmt(inputs.targetAnnualSpending)}/year in today&apos;s money (excluding
+          any ongoing State Pension, which is added separately each year).
+        </p>
       </div>
 
       {/* Portfolio breakdown at retirement */}
       {pots.length > 0 && (
         <div>
-          <h3 className="text-base font-semibold text-gray-800 mb-3">Portfolio breakdown at retirement</h3>
+          <h3 className="text-base font-semibold text-gray-800 mb-1">Portfolio breakdown at retirement</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            This is how your portfolio is split across accounts when you retire. Each account is
+            taxed differently when you draw on it — see the notes below.
+          </p>
           <div className="space-y-2">
             {pots.map((pot) => (
               <div key={pot.label} className="flex items-center gap-3">
@@ -217,9 +235,12 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
         <div>
           <h3 className="text-base font-semibold text-gray-800 mb-1">Portfolio drawdown over time</h3>
           <p className="text-xs text-gray-500 mb-4">
-            Showing how your portfolio is drawn down in retirement. Real (inflation-adjusted) values.
-            Dashed lines mark pension access (age {inputs.pensionAccessAge}) and state pension start
-            (age {inputs.statePensionAge}).
+            Each band shows the remaining balance in that account over time, in today&apos;s money.
+            We draw from your ISA first (tax-free), then your Lifetime ISA once you turn 60, then
+            your pension from age {inputs.pensionAccessAge} (using the 25% tax-free portion of each
+            withdrawal), then your GIA (subject to CGT) — with cash used to cover shortfalls
+            throughout. Dashed lines mark when your pension (age {inputs.pensionAccessAge}) and
+            State Pension (age {inputs.statePensionAge}) become available.
           </p>
           <DrawdownChart
             drawdownYears={drawdownYears}
@@ -238,6 +259,11 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
           </svg>
           Show year-by-year breakdown
         </summary>
+        <p className="text-xs text-gray-500 mt-2">
+          &ldquo;Tax paid&rdquo; includes income tax on pension/State Pension withdrawals plus
+          capital gains tax on GIA sales that year. &ldquo;State pension&rdquo; shows your net
+          (after-tax) State Pension income for that year, where applicable.
+        </p>
         <div className="mt-3 overflow-x-auto rounded-xl border border-gray-200">
           <table className="min-w-full text-xs">
             <thead className="bg-gray-50">
@@ -270,9 +296,13 @@ export default function RetirementResultsComponent({ results, inputs }: Props) {
 
       {/* Disclaimer */}
       <p className="text-xs text-gray-400 leading-relaxed border-t border-gray-100 pt-4">
-        This planner uses 2025/26 UK tax bands and assumes they remain constant. All values are
-        in real (inflation-adjusted) terms using a {(inputs.realReturnRate * 100).toFixed(1)}%
-        annual real return. This is not financial advice. For personalised advice, consult a
+        This planner uses 2025/26 UK Income Tax, Capital Gains Tax, ISA, Lifetime ISA, and pension
+        rules, and assumes these — including allowances, thresholds, and access ages — remain
+        unchanged for the rest of your life, which in reality they won&apos;t. All figures are
+        shown in today&apos;s money, assuming your investments grow at{" "}
+        {(inputs.realReturnRate * 100).toFixed(1)}% per year after inflation. It does not account
+        for defined benefit (final salary) pensions, inheritance tax, care costs, or changes in
+        your circumstances. This is not financial advice — for a plan tailored to you, speak to a
         regulated financial adviser.
       </p>
     </div>

@@ -42,9 +42,17 @@ export default function Home() {
         <div className="bg-indigo-50 rounded-xl border border-indigo-100 p-5">
           <h2 className="font-semibold text-indigo-900 mb-1">Find out if you can retire</h2>
           <p className="text-sm text-indigo-700 leading-relaxed">
-            Fill in your details below to see if you&apos;re on track. The planner models pension
-            drawdown, ISA and LISA rules, UK income tax, capital gains tax, and the state pension —
-            all using 2025/26 UK tax bands. No data leaves your browser.
+            Answer a few questions about your savings, investments, and spending plans, and
+            we&apos;ll project your finances from today through to age 100 — all in today&apos;s
+            money (adjusted for inflation). The planner will show you:
+          </p>
+          <ul className="text-sm text-indigo-700 leading-relaxed list-disc list-inside mt-2 space-y-1">
+            <li>How your pots grow until retirement, including the Lifetime ISA bonus</li>
+            <li>How you&apos;d draw down tax-efficiently — ISA first, then your pension, then taxable accounts</li>
+            <li>Whether you can bridge the gap if you retire before you can access your pension or State Pension</li>
+          </ul>
+          <p className="text-sm text-indigo-700 leading-relaxed mt-2">
+            Everything runs in your browser — nothing is saved or sent anywhere.
           </p>
         </div>
 
@@ -60,8 +68,11 @@ export default function Home() {
         )}
       </main>
 
-      <footer className="max-w-3xl mx-auto px-4 py-8 text-center text-xs text-gray-400">
-        Not financial advice. Figures are estimates based on real returns and current UK tax rules.
+      <footer className="max-w-3xl mx-auto px-4 py-8 text-center text-xs text-gray-400 leading-relaxed">
+        This tool provides estimates only and is not financial advice. It assumes 2025/26 tax
+        rules, allowances, and access ages remain unchanged for the rest of your life, which in
+        reality they won&apos;t. For advice tailored to your circumstances, speak to a regulated
+        financial adviser or use MoneyHelper&apos;s free guidance service.
       </footer>
     </div>
   );
